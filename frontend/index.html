@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RAG Chatbot — Azure</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 16px 24px;
+      background: #1a1d27;
+      border-bottom: 1px solid #2a2d3a;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header .logo {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #0078d4, #50e6ff);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; color: #fff; }
+    header p  { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    .status-dot {
+      width: 8px; height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      margin-left: auto;
+      box-shadow: 0 0 6px #22c55e;
+    }
+
+    /* ── Main layout ── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 280px;
+      background: #1a1d27;
+      border-right: 1px solid #2a2d3a;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 12px;
+    }
+    .sidebar h2 { font-size: 13px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; }
+
+    .upload-area {
+      border: 2px dashed #2a2d3a;
+      border-radius: 12px;
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .upload-area:hover { border-color: #0078d4; background: #0078d410; }
+    .upload-area.dragover { border-color: #50e6ff; background: #50e6ff15; }
+    .upload-area .icon { font-size: 28px; margin-bottom: 8px; }
+    .upload-area p { font-size: 13px; color: #6b7280; }
+    .upload-area span { font-size: 11px; color: #4b5563; margin-top: 4px; display: block; }
+    #fileInput { display: none; }
+
+    .upload-btn {
+      background: #0078d4;
+      color: #fff;
+      border: none;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.2s;
+      width: 100%;
+    }
+    .upload-btn:hover { background: #006cbf; }
+    .upload-btn:disabled { background: #2a2d3a; cursor: not-allowed; color: #6b7280; }
+
+    .upload-status {
+      font-size: 12px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      display: none;
+    }
+    .upload-status.success { background: #14532d40; color: #4ade80; border: 1px solid #14532d; }
+    .upload-status.error   { background: #7f1d1d40; color: #f87171; border: 1px solid #7f1d1d; }
+    .upload-status.loading { background: #1e3a5f40; color: #60a5fa; border: 1px solid #1e3a5f; }
+
+    .docs-list { display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; }
+    .doc-item {
+      background: #0f1117;
+      border: 1px solid #2a2d3a;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .doc-item .doc-icon { font-size: 16px; }
+    .doc-item .doc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .doc-item .doc-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      background: #14532d40;
+      color: #4ade80;
+      border-radius: 4px;
+    }
+
+    /* ── Chat area ── */
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Scrollbar */
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 2px; }
+
+    .message { display: flex; gap: 12px; max-width: 80%; }
+    .message.user { align-self: flex-end; flex-direction: row-reverse; }
+    .message.bot  { align-self: flex-start; }
+
+    .avatar {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+    .message.user .avatar { background: #0078d4; }
+    .message.bot  .avatar { background: #1a1d27; border: 1px solid #2a2d3a; }
+
+    .bubble {
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.6;
+      max-width: 100%;
+    }
+    .message.user .bubble {
+      background: #0078d4;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .message.bot .bubble {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-bottom-left-radius: 4px;
+    }
+
+    .sources {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .source-tag {
+      font-size: 11px;
+      padding: 3px 8px;
+      background: #0078d420;
+      color: #50e6ff;
+      border: 1px solid #0078d440;
+      border-radius: 4px;
+    }
+
+    .typing {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      padding: 8px 4px;
+    }
+    .typing span {
+      width: 6px; height: 6px;
+      background: #6b7280;
+      border-radius: 50%;
+      animation: bounce 1.2s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: 0.2s; }
+    .typing span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+
+    /* Welcome message */
+    .welcome {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: #4b5563;
+      text-align: center;
+      padding: 40px;
+    }
+    .welcome .big-icon { font-size: 48px; }
+    .welcome h2 { color: #6b7280; font-size: 18px; }
+    .welcome p  { font-size: 14px; max-width: 360px; }
+
+    /* ── Input bar ── */
+    .input-bar {
+      padding: 16px 24px;
+      background: #1a1d27;
+      border-top: 1px solid #2a2d3a;
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    #questionInput {
+      flex: 1;
+      background: #0f1117;
+      border: 1px solid #2a2d3a;
+      border-radius: 12px;
+      padding: 12px 16px;
+      color: #e0e0e0;
+      font-size: 14px;
+      resize: none;
+      outline: none;
+      min-height: 48px;
+      max-height: 120px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    #questionInput:focus { border-color: #0078d4; }
+    #questionInput::placeholder { color: #4b5563; }
+
+    .send-btn {
+      width: 48px; height: 48px;
+      background: #0078d4;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 20px;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .send-btn:hover   { background: #006cbf; transform: scale(1.05); }
+    .send-btn:disabled { background: #2a2d3a; cursor: not-allowed; transform: none; }
+
+    .clear-btn {
+      width: 48px; height: 48px;
+      background: transparent;
+      border: 1px solid #2a2d3a;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 18px;
+      color: #6b7280;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .clear-btn:hover { border-color: #ef4444; color: #ef4444; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🧠</div>
+  <div>
+    <h1>RAG Chatbot</h1>
+    <p>Powered by Azure AI + Groq</p>
+  </div>
+  <div class="status-dot" title="Online"></div>
+</header>
+
+<div class="main">
+
+  <!-- ── Sidebar ── -->
+  <div class="sidebar">
+    <h2>Documents</h2>
+
+    <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📁</div>
+      <p>Drop files here or click to upload</p>
+      <span>PDF, DOCX, PPTX, XLSX, TXT and more</span>
+    </div>
+    <input type="file" id="fileInput" multiple accept="*/*" onchange="handleFiles(this.files)"/>
+
+    <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">
+      + Upload Document
+    </button>
+
+    <div class="upload-status" id="uploadStatus"></div>
+
+    <h2 style="margin-top:8px">Indexed Files</h2>
+    <div class="docs-list" id="docsList">
+      <div style="font-size:12px;color:#4b5563">No documents yet</div>
+    </div>
+  </div>
+
+  <!-- ── Chat area ── -->
+  <div class="chat-area">
+    <div id="messages">
+      <div class="welcome" id="welcome">
+        <div class="big-icon">💬</div>
+        <h2>Ask anything about your documents</h2>
+        <p>Upload a document on the left, then ask questions here. The AI will answer using only your content.</p>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <textarea id="questionInput" placeholder="Ask a question about your documents…" rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="clear-btn" onclick="clearChat()" title="Clear chat">🗑</button>
+      <button class="send-btn" id="sendBtn" onclick="sendQuestion()" title="Send">➤</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── Config ───────────────────────────────────────────────────────
+  // Update this after deploying Azure Functions to cloud
+  //const API_BASE = window.location.hostname === "localhost"
+    //? "http://localhost:7071/api"
+    //: "/api";   // Same origin on Static Web App
+    const API_BASE = ["localhost", "0.0.0.0", "127.0.0.1"].includes(window.location.hostname)
+  ? "http://localhost:7071/api"
+  : "https://rag-chatbot-fn.azurewebsites.net/api";
+
+  let history   = [];
+  let indexedDocs = [];
+
+  // ── File upload ──────────────────────────────────────────────────
+  const uploadArea = document.getElementById("uploadArea");
+  uploadArea.addEventListener("dragover", e => { e.preventDefault(); uploadArea.classList.add("dragover"); });
+  uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("dragover"));
+  uploadArea.addEventListener("drop", e => {
+    e.preventDefault();
+    uploadArea.classList.remove("dragover");
+    handleFiles(e.dataTransfer.files);
+  });
+
+  async function handleFiles(files) {
+    if (!files.length) return;
+    const status = document.getElementById("uploadStatus");
+    const btn    = document.getElementById("uploadBtn");
+    btn.disabled = true;
+
+    for (const file of files) {
+      showStatus(`Uploading ${file.name}...`, "loading");
+      try {
+        const res = await fetch(`${API_BASE}/upload?filename=${encodeURIComponent(file.name)}`, {
+          method: "POST",
+          body: file
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showStatus(`✅ ${file.name} uploaded! Indexing in background...`, "success");
+          addDocToList(file.name);
+        } else {
+          showStatus(`❌ ${data.error}`, "error");
+        }
+      } catch (e) {
+        showStatus(`❌ Upload failed: ${e.message}`, "error");
+      }
+    }
+    btn.disabled = false;
+    document.getElementById("fileInput").value = "";
+  }
+
+  function showStatus(msg, type) {
+    const el = document.getElementById("uploadStatus");
+    el.textContent = msg;
+    el.className   = `upload-status ${type}`;
+    el.style.display = "block";
+    if (type !== "loading") setTimeout(() => el.style.display = "none", 4000);
+  }
+
+  function addDocToList(filename) {
+    if (indexedDocs.includes(filename)) return;
+    indexedDocs.push(filename);
+    const list = document.getElementById("docsList");
+    if (list.querySelector("div[style]")) list.innerHTML = "";
+    const ext  = filename.split(".").pop().toUpperCase();
+    const icons = { PDF:"📄", DOCX:"📝", PPTX:"📊", XLSX:"📈", TXT:"📃", MD:"📃" };
+    list.innerHTML += `
+      <div class="doc-item">
+        <span class="doc-icon">${icons[ext] || "📁"}</span>
+        <span class="doc-name" title="${filename}">${filename}</span>
+        <span class="doc-badge">indexed</span>
+      </div>`;
+  }
+
+  // ── Chat ─────────────────────────────────────────────────────────
+  async function sendQuestion() {
+    const input = document.getElementById("questionInput");
+    const q     = input.value.trim();
+    if (!q) return;
+
+    // Remove welcome screen
+    const welcome = document.getElementById("welcome");
+    if (welcome) welcome.remove();
+
+    appendMessage("user", q);
+    input.value = "";
+    autoResize(input);
+    history.push({ role: "user", content: q });
+
+    // Show typing indicator
+    const typingId = showTyping();
+    document.getElementById("sendBtn").disabled = true;
+
+    try {
+      const res  = await fetch(`${API_BASE}/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q, history })
+      });
+      const data = await res.json();
+      removeTyping(typingId);
+
+      if (res.ok) {
+        appendMessage("bot", data.answer, data.sources);
+        history.push({ role: "assistant", content: data.answer });
+      } else {
+        appendMessage("bot", `❌ Error: ${data.error}`);
+      }
+    } catch (e) {
+      removeTyping(typingId);
+      appendMessage("bot", `❌ Could not reach the API: ${e.message}`);
+    }
+
+    document.getElementById("sendBtn").disabled = false;
+  }
+
+  function appendMessage(role, text, sources = []) {
+    const container = document.getElementById("messages");
+    const div = document.createElement("div");
+    div.className = `message ${role}`;
+
+    const sourcesHTML = sources.length
+      ? `<div class="sources">${sources.map(s =>
+          `<span class="source-tag">📎 ${s}</span>`).join("")}</div>`
+      : "";
+
+    div.innerHTML = `
+      <div class="avatar">${role === "user" ? "👤" : "🧠"}</div>
+      <div>
+        <div class="bubble">${text.replace(/\n/g, "<br>")}</div>
+        ${sourcesHTML}
+      </div>`;
+
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function showTyping() {
+    const container = document.getElementById("messages");
+    const id  = "typing-" + Date.now();
+    const div = document.createElement("div");
+    div.className = "message bot"; div.id = id;
+    div.innerHTML = `
+      <div class="avatar">🧠</div>
+      <div class="bubble">
+        <div class="typing"><span></span><span></span><span></span></div>
+      </div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    return id;
+  }
+
+  function removeTyping(id) {
+    document.getElementById(id)?.remove();
+  }
+
+  function clearChat() {
+    history = [];
+    const m = document.getElementById("messages");
+    m.innerHTML = `
+      <div class="welcome" id="welcome">
+        <div class="big-icon">💬</div>
+        <h2>Ask anything about your documents</h2>
+        <p>Upload a document on the left, then ask questions here.</p>
+      </div>`;
+  }
+
+  function handleKey(e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendQuestion(); }
+  }
+
+  function autoResize(el) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }
+</script>
+</body>
+</html>
