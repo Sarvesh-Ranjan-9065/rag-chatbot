@@ -1,0 +1,10 @@
+azure-functions
+azure-storage-blob
+azure-search-documents
+azure-ai-documentintelligence
+openai
+python-docx
+python-pptx
+openpyxl
+python-dotenv
+groq
